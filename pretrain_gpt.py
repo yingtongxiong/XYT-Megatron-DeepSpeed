@@ -17,6 +17,7 @@ from megatron.training import pretrain
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.utils import average_losses_across_data_parallel_group, update_rotary_pos_emb
 from megatron.arguments import core_transformer_config_from_args
+from megatron.data.dummy_dataset import RandomDataset
 
 import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
@@ -107,9 +108,15 @@ def get_batch(data_iterator):
     data_b = tensor_parallel.broadcast_data(keys, data, datatype)
 
     # Unpack.
-    tokens_ = data_b['text'].long()
+    tokens_ = data_b["text"].long()
     labels = tokens_[:, 1:].contiguous()
-    tokens = tokens_[:, :-1].contiguous()
+
+    append_tensor = torch.full((tokens_.size(0), 1), -100, dtype=tokens_.dtype, device=tokens_.device)
+    labels = torch.cat((tokens_[:, 1:], append_tensor), dim=1).contiguous()
+    # tokens_ = data_b['text'].long()
+    # labels = tokens_[:, 1:].contiguous()
+    # tokens = tokens_[:, :-1].contiguous()
+    tokens = tokens_.contiguous()
 
     # Get the masks and postition ids.
     skip_mask = args.use_flash_attn or args.use_flash_attn_triton
@@ -351,9 +358,21 @@ def git_ds_info():
     print(f'**** Git info for Megatron: git_hash={git_hash} git_branch={git_branch} ****')
 
 
+def random_train_valid_test_datasets_provider(train_val_test_num_samples):
+    """Build train, valid, and test datasets."""
+    args = get_args()
+
+    print_rank_0("> building train, validation, and test datasets " "for llama ...")
+    train_ds = RandomDataset(num_samples=1000000, seq_len=args.seq_length)
+    valid_ds = RandomDataset(num_samples=20000, seq_len=args.seq_length)
+    test_ds = RandomDataset(num_samples=10000, seq_len=args.seq_length)
+    print_rank_0("> finished creating llama datasets ...")
+
+    return train_ds, valid_ds, test_ds
+
 if __name__ == "__main__":
     git_ds_info()
-    pretrain(train_valid_test_datasets_provider,
+    pretrain(random_train_valid_test_datasets_provider,
              model_provider,
              ModelType.encoder_or_decoder,
              forward_step,

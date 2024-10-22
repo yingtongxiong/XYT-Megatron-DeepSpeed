@@ -1557,6 +1557,7 @@ def _add_distillation_args(parser):
     return parser
 
 
+# 抓trace profiling配置
 def _add_profiler_args(parser):
     group = parser.add_argument_group(title='profiling configuration')
 
